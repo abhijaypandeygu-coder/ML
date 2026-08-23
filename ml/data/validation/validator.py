@@ -1,54 +1,77 @@
 import pandas as pd
+import numpy as np
 from typing import List, Dict, Any
-from pydantic import ValidationError
-from ml.data.schemas import FreightMarketData, PortData
+from ml.data.schemas.core import QualityStatus
 
-def validate_freight_data(data: List[Dict[str, Any]]) -> pd.DataFrame:
-    validated_records = []
-    errors = []
+class ValidationEngine:
+    """
+    Validates data against business rules and detects outliers.
+    Strictly follows the principle: Flag invalid data, do not silently drop it.
+    """
     
-    for i, record in enumerate(data):
-        try:
-            # Parse and validate using Pydantic
-            valid_record = FreightMarketData(**record)
-            validated_records.append(valid_record.model_dump())
-        except ValidationError as e:
-            errors.append({"row": i, "errors": e.errors()})
+    def detect_outliers_iqr(self, df: pd.DataFrame, column: str) -> pd.Series:
+        """Flags outliers using the robust IQR method."""
+        if df[column].isnull().all():
+            return pd.Series([False] * len(df), index=df.index)
             
-    if errors:
-        print(f"Validation found {len(errors)} errors out of {len(data)} records.")
-        # In a real system, you might log these or drop them. For now we just print.
+        Q1 = df[column].quantile(0.25)
+        Q3 = df[column].quantile(0.75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
         
-    return pd.DataFrame(validated_records)
-
-def validate_port_data(data: List[Dict[str, Any]]) -> pd.DataFrame:
-    validated_records = []
-    errors = []
-    
-    for i, record in enumerate(data):
-        try:
-            valid_record = PortData(**record)
-            validated_records.append(valid_record.model_dump())
-        except ValidationError as e:
-            errors.append({"row": i, "errors": e.errors()})
+        return (df[column] < lower_bound) | (df[column] > upper_bound)
+        
+    def validate_freight_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Validates freight data according to business rules."""
+        if df.empty:
+            return df
             
-    if errors:
-        print(f"Validation found {len(errors)} errors in Port Data.")
+        df = df.copy()
         
-    return pd.DataFrame(validated_records)
+        if 'data_quality' not in df.columns:
+            df['data_quality'] = QualityStatus.VALID.value
+            
+        # Business Rule 1: Freight rates must be > 0
+        if 'freight_rate' in df.columns:
+            invalid_rates = df['freight_rate'] <= 0
+            df.loc[invalid_rates, 'data_quality'] = QualityStatus.INVALID.value
+            
+            # Outlier detection
+            outliers = self.detect_outliers_iqr(df, 'freight_rate')
+            # Flag outliers only if they aren't completely invalid
+            df.loc[outliers & ~invalid_rates, 'data_quality'] = QualityStatus.OUTLIER.value
+            
+        return df
+        
+    def validate_port_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Validates port data (draft, LOA, beam constraints)."""
+        if df.empty:
+            return df
+            
+        df = df.copy()
+        if 'data_quality' not in df.columns:
+            df['data_quality'] = QualityStatus.VALID.value
+            
+        # Business Rules: physical dimensions must be > 0
+        for col in ['max_draft_m', 'max_loa_m', 'max_beam_m']:
+            if col in df.columns:
+                invalid = df[col] <= 0
+                df.loc[invalid, 'data_quality'] = QualityStatus.INVALID.value
+                
+        return df
 
-if __name__ == "__main__":
-    print("Running data validation...")
-    try:
-        freight_df = pd.read_csv("freight_data_synthetic.csv")
-        # Convert date to string for pydantic parsing
-        freight_records = freight_df.to_dict(orient="records")
-        validated_freight = validate_freight_data(freight_records)
-        print(f"Validated {len(validated_freight)} freight records successfully.")
+    def normalize_units(self, df: pd.DataFrame, column: str, from_unit: str, to_unit: str) -> pd.DataFrame:
+        """Standardizes internal units across domains."""
+        conversion_factors = {
+            ('KM', 'NM'): 0.539957,
+            ('NM', 'KM'): 1.852,
+            ('LBS', 'MT'): 0.000453592,
+            ('MT', 'LBS'): 2204.62,
+        }
         
-        port_df = pd.read_csv("port_data_synthetic.csv")
-        port_records = port_df.to_dict(orient="records")
-        validated_ports = validate_port_data(port_records)
-        print(f"Validated {len(validated_ports)} port records successfully.")
-    except FileNotFoundError:
-        print("Data files not found. Run generator.py first.")
+        df = df.copy()
+        if (from_unit, to_unit) in conversion_factors and column in df.columns:
+            df[column] = df[column] * conversion_factors[(from_unit, to_unit)]
+            
+        return df

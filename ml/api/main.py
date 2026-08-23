@@ -15,6 +15,19 @@ app = FastAPI(
     version="1.0.0"
 )
 
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+from ml.api.routers import data
+app.include_router(data.router)
+
 # --- Pydantic Models for Input Validation ---
 
 class ForecastRequest(BaseModel):
@@ -119,6 +132,50 @@ def simulate_scenario(req: WhatIfRequest):
             "status": "success",
             "simulation_result": result
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/optimize/full-strategy")
+def optimize_full_strategy(req: VesselOptimizationRequest):
+    try:
+        # Simple orchestrator mock for full-strategy
+        from ml.optimization.schemas.strategy import RecommendedStrategyResponse
+        from ml.optimization.ranking.strategy_ranker import StrategyRanker
+        from ml.optimization.explainability.recommendation_explainer import RecommendationExplainer
+        
+        # In a real scenario, we'd call all optimizers here.
+        # For now, just assemble a response with ranker and explainer
+        
+        ranker = StrategyRanker()
+        explainer = RecommendationExplainer()
+        
+        mock_combination = {
+            "expected_total_cost": 1500000.0,
+            "risk_score": 0.15,
+            "risk_adjusted_cost": 1550000.0,
+            "recommended_vessel_type": "Capesize",
+            "recommended_route": "Route A",
+            "recommended_contract": "COA",
+            "expected_savings_vs_spot": 5.0
+        }
+        
+        ranked = ranker.rank_alternatives([mock_combination])
+        explanation = explainer.generate_explanation(mock_combination)
+        
+        response = RecommendedStrategyResponse(
+            recommended_vessel="Vessel X",
+            recommended_vessel_type=mock_combination["recommended_vessel_type"],
+            recommended_route=mock_combination["recommended_route"],
+            recommended_entry_window={"start": "2023-11-01", "end": "2023-11-15"},
+            recommended_contract=mock_combination["recommended_contract"],
+            expected_total_cost=mock_combination["expected_total_cost"],
+            risk_adjusted_cost=mock_combination["risk_adjusted_cost"],
+            risk_score=mock_combination["risk_score"],
+            expected_savings_vs_spot=mock_combination["expected_savings_vs_spot"],
+            confidence=0.85,
+            explanation=explanation
+        )
+        return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
