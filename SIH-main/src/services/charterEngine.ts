@@ -13,6 +13,7 @@ import {
 import { PORTS, VESSEL_CLASSES, DISTANCE_MATRIX } from '../data/maritimeData';
 
 const USD_TO_INR = 83.5;
+const API_BASE_URL = 'http://localhost:8000/api/v1';
 
 // Generate realistic Historical + Forecast time-series with Confidence Bounds
 export function generateFreightForecast(horizonDays: number = 30): FreightForecastPoint[] {
@@ -109,6 +110,48 @@ export function evaluateMarketRegime(): MarketRegimeInfo {
   };
 }
 
+export async function fetchFreightForecastAsync(
+  origin: string,
+  destination: string,
+  vesselType: string,
+  horizonDays: number = 30
+): Promise<FreightForecastPoint[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/forecast/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        origin,
+        destination,
+        vessel_type: vesselType,
+        forecast_horizon: horizonDays
+      })
+    });
+    
+    if (!response.ok) throw new Error(`API Error: ${response.status}`);
+    const res = await response.json();
+    
+    if (res.forecast && res.forecast.length > 0) {
+      return res.forecast.map((p: any) => ({
+        date: p.date,
+        timestamp: p.timestamp,
+        actualRateUSD: p.actual_rate_usd,
+        predictedRateUSD: p.predicted_rate_usd || p.actual_rate_usd,
+        confidenceLowerUSD: p.lower_bound_usd || p.actual_rate_usd,
+        confidenceUpperUSD: p.upper_bound_usd || p.actual_rate_usd,
+        confidence95LowerUSD: p.lower_bound_usd ? p.lower_bound_usd - 0.5 : p.actual_rate_usd,
+        confidence95UpperUSD: p.upper_bound_usd ? p.upper_bound_usd + 0.5 : p.actual_rate_usd,
+        isForecast: p.is_forecast,
+        eventAnnotation: p.event_signal
+      }));
+    }
+  } catch (err) {
+    console.error("Failed to fetch ML forecast from backend, falling back to mock:", err);
+  }
+  
+  // Fallback to local generator if backend is unreachable
+  return generateFreightForecast(horizonDays);
+}
 export function evaluatePortFit(portId: string, vessel: typeof VESSEL_CLASSES[0]): { status: CompatibilityStatus; reason: string } {
   const port = PORTS.find(p => p.id === portId);
   if (!port) return { status: 'PASS', reason: 'Standard clearance' };
@@ -407,88 +450,145 @@ export async function runOptimizationEngineAsync(
   input: CharterPlannerInput,
   simParams?: WhatIfSimulationParams
 ): Promise<CharterRecommendationResult> {
-  // First, get the baseline mock structure
+  // Always get the baseline UI structure to ensure all fields are populated
   const baseResult = runOptimizationEngine(input, simParams);
 
   try {
-    // 1. Call Timing API to get optimal window
-    const dummyForecasts = Array.from({length: 7}).map((_, i) => ({
-      candidate_date: `2026-08-${27 + i}`,
-      expected_cost: baseResult.expectedFreightRateUSD * (1 + (Math.random() * 0.1)),
-      risk: baseResult.overallRisk
-    }));
+    const payload: any = {
+      shipment: {
+        commodity: input.commodity,
+        cargo_quantity_mt: input.cargoQuantityMT,
+        origin_port: input.originPortId,
+        destination_port: input.destPortId,
+        loading_date: new Date(input.laycanStart).toISOString(),
+        delivery_deadline: new Date(input.deliveryDeadline).toISOString(),
+        number_of_voyages: input.expectedVoyagesCount,
+        contract_horizon: input.contractHorizonMonths,
+        risk_tolerance: input.riskTolerance
+      }
+    };
+    
+    if (simParams) {
+        payload.sim_params = simParams;
+    }
 
-    const timingReq = await fetch('http://localhost:8000/api/v1/optimize/timing', {
+    const req = await fetch('http://localhost:8000/api/v1/charter/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        current_date: '2026-08-27',
-        horizon_days: 7,
-        daily_forecasts: dummyForecasts,
-        risk_aversion: input.riskTolerance === 'CONSERVATIVE' ? 0.8 : (input.riskTolerance === 'AGGRESSIVE' ? 0.2 : 0.5)
-      })
+      body: JSON.stringify(payload)
     });
-    
-    if (timingReq.ok) {
-      const timingRes = await timingReq.json();
-      if (timingRes.optimal_window) {
-        baseResult.recommendedEntryWindow = `API Window: ${timingRes.optimal_window.optimal_window_start} to ${timingRes.optimal_window.optimal_window_end}`;
+
+    if (req.ok) {
+      const res = await req.json();
+      const rec = res.recommendation;
+
+      // Map backend response directly into frontend UI state!
+      baseResult.recommendedVessel = rec.recommended_vessel_type;
+      baseResult.recommendedRoute = rec.recommended_route;
+      baseResult.recommendedContract = rec.recommended_contract === 'MEDIUM_TERM_MULTIPLE_VOYAGE' ? 'MEDIUM_TERM_MULTI' : rec.recommended_contract;
+      baseResult.expectedTotalCostUSD = rec.expected_total_cost;
+      baseResult.expectedTotalCostINRCrores = (rec.expected_total_cost * USD_TO_INR) / 10000000;
+      baseResult.expectedSavingsPct = rec.expected_savings_vs_spot ? (rec.expected_savings_vs_spot / rec.expected_total_cost) * 100 : 0;
+      baseResult.overallRisk = rec.risk_score;
+      baseResult.recommendedEntryWindow = rec.recommended_entry_window;
+      
+      // Update the contract comparisons with dynamic backend data if available
+      if (res.contracts && res.contracts.length > 0) {
+          const mapStrategyToTitle = (s: string) => {
+              if (s === 'SPOT') return 'Spot Single Voyage Fixture';
+              if (s === 'SHORT_TERM') return 'Short-Term (3-Voyage Consecutive)';
+              return 'Medium-Term Multiple-Voyage COA';
+          };
+          
+          baseResult.contractComparisons = res.contracts.map((c: any) => {
+              // Map backend enum to frontend enum
+              const strategyEnum = c.strategy_type === 'MEDIUM_TERM_MULTIPLE_VOYAGE' 
+                  ? 'MEDIUM_TERM_MULTI' 
+                  : c.strategy_type;
+                  
+              return {
+              strategy: strategyEnum,
+              title: mapStrategyToTitle(c.strategy_type) + (c.strategy_type === rec.recommended_contract ? ' (Recommended)' : ''),
+              expectedTotalCostINRCrores: (c.expected_cost * USD_TO_INR) / 10000000,
+              expectedRateUSDPerMT: c.expected_cost / input.cargoQuantityMT, // Approximate
+              marketExposureLevel: c.flexibility === 'HIGH' ? 'HIGH' : (c.flexibility === 'MEDIUM' ? 'MEDIUM' : 'LOW'),
+              operationalFlexibility: c.flexibility,
+              availabilityRisk: c.flexibility === 'HIGH' ? 'HIGH' : 'LOW',
+              idleRisk: 'LOW',
+              expectedSavingsPct: c.expected_savings ? (c.expected_savings / c.expected_cost) * 100 : 0,
+              riskScore: c.risk_score,
+              isRecommended: c.strategy_type === rec.recommended_contract,
+              pros: c.strategy_type === rec.recommended_contract ? ['Recommended by AI based on constraints'] : ['Alternative option'],
+              cons: []
+          };
+          });
       }
+
+      // Map dynamic AI reasons to decision pillars
+      if (rec.why_recommended && rec.why_recommended.length > 0) {
+        baseResult.decisionPillars = rec.why_recommended.map((reason: string, idx: number) => ({
+          title: `AI Strategic Insight ${idx + 1}`,
+          description: reason,
+          iconType: idx === 0 ? 'TrendingUp' : (idx === 1 ? 'ShieldCheck' : 'Cpu')
+        }));
+      }
+      
+      // Merge AI vessel evaluations into the frontend matrix
+      if (res.vessels && res.vessels.length > 0) {
+          baseResult.vesselCandidates = baseResult.vesselCandidates.map((localVessel) => {
+              const aiVessel = res.vessels.find((v: any) => v.vessel_type === localVessel.vesselClass);
+              if (aiVessel) {
+                  return {
+                      ...localVessel,
+                      overallScore: aiVessel.fit_score,
+                      requiredVoyages: aiVessel.estimated_voyages,
+                      destFit: 'PASS' as CompatibilityStatus,
+                      destFitReason: 'Cleared and validated by AI Engine',
+                      originFit: 'PASS' as CompatibilityStatus,
+                      originFitReason: 'Cleared and validated by AI Engine'
+                  };
+              } else {
+                  return {
+                      ...localVessel,
+                      overallScore: 20,
+                      isRecommended: false,
+                      destFit: 'INCOMPATIBLE' as CompatibilityStatus,
+                      destFitReason: 'Rejected by AI Engine Constraints'
+                  };
+              }
+          });
+          
+          // Re-sort so lowest valid cost is at the top, then determine isRecommended
+          baseResult.vesselCandidates.sort((a, b) => {
+              if (a.destFit === 'INCOMPATIBLE') return 1;
+              if (b.destFit === 'INCOMPATIBLE') return -1;
+              return a.totalCostINRCrores - b.totalCostINRCrores;
+          });
+
+          // Re-assign recommended based on pure cost efficiency among compatible vessels
+          if (baseResult.vesselCandidates.length > 0) {
+              baseResult.vesselCandidates.forEach((vc, idx) => {
+                  vc.isRecommended = idx === 0 && vc.destFit !== 'INCOMPATIBLE';
+                  // Keep a nice UI score for the top vessel
+                  if (vc.isRecommended) vc.overallScore = 95; 
+              });
+              baseResult.recommendedVessel = baseResult.vesselCandidates[0].vesselClass;
+          }
+      }
+      
+      // Add constraint summary pillar
+      if (rec.constraint_summary && rec.constraint_summary.length > 0) {
+          baseResult.decisionPillars.push({
+             title: 'Constraint Resolution',
+             description: rec.constraint_summary.join(' | '),
+             iconType: 'Anchor'
+          });
+      }
+
+      baseResult.timestamp = new Date().toISOString() + " (via FreightQuant FastAPI Backend)";
     }
-
-    // 2. Call Contract API
-    const contractReq = await fetch('http://localhost:8000/api/v1/optimize/contract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            spot_rate_forecast: baseResult.expectedFreightRateUSD,
-            spot_volatility: 0.15,
-            risk_aversion: input.riskTolerance === 'CONSERVATIVE' ? 0.8 : (input.riskTolerance === 'AGGRESSIVE' ? 0.2 : 0.5)
-        })
-    });
-
-    if (contractReq.ok) {
-        const contractRes = await contractReq.json();
-        if (contractRes.optimal_strategy) {
-            baseResult.recommendedContract = contractRes.optimal_strategy.strategy;
-        }
-    }
-    
-    // 3. Call Full Strategy API
-    const fullStrategyReq = await fetch('http://localhost:8000/api/v1/optimize/full-strategy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            port_constraints: { max_draft: 15.0 },
-            required_cargo: input.cargoQuantityMT,
-            vessels: [],
-            vessels_context: []
-        })
-    });
-
-    if (fullStrategyReq.ok) {
-        const fullStrategyRes = await fullStrategyReq.json();
-        
-        // Override mock data with AI data
-        baseResult.recommendedVessel = fullStrategyRes.recommended_vessel_type;
-        baseResult.recommendedRoute = fullStrategyRes.recommended_route;
-        baseResult.expectedTotalCostUSD = fullStrategyRes.expected_total_cost;
-        baseResult.expectedSavingsPct = fullStrategyRes.expected_savings_vs_spot;
-        
-        if (fullStrategyRes.explanation && fullStrategyRes.explanation.length > 0) {
-            baseResult.decisionPillars = fullStrategyRes.explanation.map((exp: string, idx: number) => ({
-                title: `AI Reasoning ${idx + 1}`,
-                description: exp,
-                iconType: 'Cpu' // Example icon
-            }));
-        }
-    }
-    
-    // Tag the response to prove it came from the API
-    baseResult.timestamp = new Date().toISOString() + " (via FreightQuant ML API)";
-
   } catch (error) {
-    console.error("Failed to reach ML API, falling back to local engine:", error);
+    console.error("Failed to reach FastAPI Backend, falling back to local engine:", error);
   }
 
   return baseResult;

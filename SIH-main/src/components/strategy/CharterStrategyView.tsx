@@ -31,9 +31,11 @@ export const CharterStrategyView: React.FC<CharterStrategyViewProps> = ({
   const [selectedStrategy, setSelectedStrategy] = useState<'SPOT' | 'SHORT_TERM' | 'MEDIUM_TERM_MULTI'>('MEDIUM_TERM_MULTI');
 
   const rec = recommendation;
-  const spotOption = rec.contractComparisons.find(c => c.strategy === 'SPOT')!;
-  const multiOption = rec.contractComparisons.find(c => c.strategy === 'MEDIUM_TERM_MULTI')!;
-  const inrSavingsCr = (spotOption.expectedTotalCostINRCrores - multiOption.expectedTotalCostINRCrores).toFixed(2);
+  const spotOption = rec.contractComparisons.find(c => c.strategy === 'SPOT' || c.strategy === 'SPOT_SINGLE_VOYAGE');
+  const multiOption = rec.contractComparisons.find(c => c.strategy === 'MEDIUM_TERM_MULTI' || c.strategy === 'MEDIUM_TERM_MULTIPLE_VOYAGE');
+  const inrSavingsCr = (spotOption && multiOption) 
+      ? (spotOption.expectedTotalCostINRCrores - multiOption.expectedTotalCostINRCrores).toFixed(2)
+      : '0.00';
 
   return (
     <div className="space-y-6">
@@ -110,7 +112,7 @@ export const CharterStrategyView: React.FC<CharterStrategyViewProps> = ({
               <span>Recommended Contract</span>
             </div>
             <div className="text-base font-bold text-white leading-snug">
-              Medium-Term Multi-Voyage COA
+              {rec.contractComparisons.find(c => c.isRecommended)?.title.replace(' (Recommended)', '') || 'Medium-Term Multi-Voyage COA'}
             </div>
             <div className="text-[11px] text-amber-400 font-medium mt-1">
               Guarantees laycan + demurrage cap

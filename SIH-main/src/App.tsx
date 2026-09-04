@@ -23,6 +23,7 @@ import { ModelTransparencyView } from './components/transparency/ModelTransparen
 import { SettingsDataSourcesView } from './components/settings/SettingsDataSourcesView';
 import { ExplanationModal } from './components/modals/ExplanationModal';
 import { DemoGuideModal } from './components/modals/DemoGuideModal';
+import { LivePortTicker } from './components/dashboard/LivePortTicker';
 
 import { 
   CharterPlannerInput, 
@@ -32,7 +33,8 @@ import {
 import { 
   generateFreightForecast, 
   runOptimizationEngine,
-  runOptimizationEngineAsync
+  runOptimizationEngineAsync,
+  fetchFreightForecastAsync
 } from './services/charterEngine';
 import { PORTS } from './data/maritimeData';
 import { ArrowLeft } from 'lucide-react';
@@ -65,10 +67,24 @@ export function App() {
     urgency: 'NORMAL',
   });
 
-  // Freight Forward Curve Data
-  const forecastData = React.useMemo<FreightForecastPoint[]>(() => {
-    return generateFreightForecast(30);
-  }, []);
+  // Freight Forward Curve Data (Now linked to AI Backend)
+  const [forecastData, setForecastData] = useState<FreightForecastPoint[]>([]);
+
+  React.useEffect(() => {
+    let mounted = true;
+    
+    // Fetch real-time (mocked by backend) forecast
+    fetchFreightForecastAsync(
+      plannerInput.originCountry, 
+      plannerInput.destPortId, 
+      plannerInput.preferredVesselClass || 'Panamax', 
+      90
+    ).then(data => {
+      if (mounted) setForecastData(data);
+    });
+    
+    return () => { mounted = false; };
+  }, [plannerInput.originCountry, plannerInput.destPortId, plannerInput.preferredVesselClass]);
 
   // Optimized Recommendation State
   const [recommendation, setRecommendation] = useState<CharterRecommendationResult>(() => {
@@ -107,7 +123,7 @@ export function App() {
 
   const selectedOrigin = PORTS.find(p => p.id === plannerInput.originPortId)?.name || 'Hay Point';
   const selectedDest = PORTS.find(p => p.id === plannerInput.destPortId)?.name || 'Paradip Port';
-  const routeName = `${selectedOrigin} (Aus) → ${selectedDest} (India)`;
+  const routeName = `${selectedOrigin} (${plannerInput.originCountry}) → ${selectedDest} (India)`;
 
   // Scroll to top whenever main navigation changes
   const handlePageNavigation = (page: MainNavPage) => {
@@ -174,6 +190,8 @@ export function App() {
               onOpenExplainModal={() => setIsExplainModalOpen(true)}
               onOpenDemoFlow={() => setIsDemoGuideOpen(true)}
             />
+            
+            <LivePortTicker />
 
             <main className="flex-1 p-6 space-y-6 max-w-7xl w-full mx-auto">
               {/* Return to website banner */}
@@ -186,7 +204,7 @@ export function App() {
                   <span>Return to FreightQuant Overview</span>
                 </button>
                 <span className="text-xs font-mono text-cyan-400 font-bold">
-                  Active Corridor: Australia → Paradip Port
+                  Active Corridor: {plannerInput.originCountry} → {selectedDest}
                 </span>
               </div>
 

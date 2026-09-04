@@ -10,9 +10,13 @@ class ForecastRequest(BaseModel):
 
 class ForecastDataPoint(BaseModel):
     date: str
-    predicted_rate: float
-    lower_bound: float
-    upper_bound: float
+    timestamp: int
+    actual_rate_usd: Optional[float] = None
+    predicted_rate_usd: Optional[float] = None
+    lower_bound_usd: Optional[float] = None
+    upper_bound_usd: Optional[float] = None
+    is_forecast: bool
+    event_signal: Optional[str] = None
 
 class ForecastResponse(BaseModel):
     forecast_id: str

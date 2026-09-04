@@ -12,24 +12,31 @@ class OptimizationService:
         # Mock logic to simulate vessel optimization based on constraints
         vessels = []
         
-        # Capesize rules
+        # Capesize rules (Draft >= 18, Cargo >= 100k)
         if request.max_draft_m >= 18.0 and request.cargo_quantity_mt >= 100000:
             voyages = math.ceil(request.cargo_quantity_mt / 170000)
             vessels.append(OptimizedVessel(
                 vessel_type="Capesize", capacity_mt=170000, fit_score=95.0, estimated_voyages=voyages
             ))
             
-        # Panamax rules
-        if request.max_draft_m >= 13.0:
+        # Panamax rules (Draft >= 13, Cargo >= 60k)
+        if request.max_draft_m >= 13.0 and request.cargo_quantity_mt >= 60000:
             voyages = math.ceil(request.cargo_quantity_mt / 75000)
             vessels.append(OptimizedVessel(
                 vessel_type="Panamax", capacity_mt=75000, fit_score=85.0, estimated_voyages=voyages
             ))
             
-        # Supramax fallback
+        # Supramax fallback (Always fits)
         voyages = math.ceil(request.cargo_quantity_mt / 55000)
         vessels.append(OptimizedVessel(
             vessel_type="Supramax", capacity_mt=55000, fit_score=70.0, estimated_voyages=voyages
+        ))
+        
+        # Handysize fallback (Always fits, but low score for large cargo)
+        voyages = math.ceil(request.cargo_quantity_mt / 35000)
+        handy_score = 90.0 if request.cargo_quantity_mt <= 40000 else 40.0
+        vessels.append(OptimizedVessel(
+            vessel_type="Handysize", capacity_mt=35000, fit_score=handy_score, estimated_voyages=voyages
         ))
             
         vessels.sort(key=lambda x: x.fit_score, reverse=True)
@@ -39,7 +46,7 @@ class OptimizationService:
         # Mock logic to simulate contract optimization
         strategies = []
         
-        base_cost = request.total_voyages * 500000 # Mock baseline cost
+        base_cost = request.total_voyages * request.cargo_quantity_mt * request.freight_rate
         
         # Spot
         strategies.append(ContractStrategy(

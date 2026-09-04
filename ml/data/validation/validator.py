@@ -75,3 +75,35 @@ class ValidationEngine:
             df[column] = df[column] * conversion_factors[(from_unit, to_unit)]
             
         return df
+
+    def generate_data_quality_report(self, df: pd.DataFrame, source_name: str) -> Dict[str, Any]:
+        """
+        Generates the mandatory Data Quality Report required by the Master Prompt.
+        """
+        if df.empty:
+            return {"status": "EMPTY_DATAFRAME"}
+            
+        report = {
+            "source_name": source_name,
+            "rows": len(df),
+            "features": len(df.columns),
+            "missingness_percentage": round((df.isnull().sum().sum() / df.size) * 100, 2),
+            "duplicates": int(df.duplicated().sum()),
+            "staleness_days": None,
+            "data_quality_distribution": {}
+        }
+        
+        # Check staleness if there's a timestamp column
+        if 'timestamp' in df.columns:
+            try:
+                latest_date = pd.to_datetime(df['timestamp']).max()
+                current_date = pd.to_datetime('today')
+                report['staleness_days'] = (current_date - latest_date).days
+            except Exception:
+                pass
+                
+        # Get data quality status distribution if we validated it
+        if 'data_quality' in df.columns:
+            report['data_quality_distribution'] = df['data_quality'].value_counts().to_dict()
+            
+        return report

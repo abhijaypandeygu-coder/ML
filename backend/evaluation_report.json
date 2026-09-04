@@ -1,0 +1,65 @@
+{
+    "evaluation_id": "f42a8218-b69f-4539-8641-4c7073ba48f5",
+    "evaluation_timestamp": "2026-08-23T12:13:35.407148",
+    "data_quality": {
+        "row_count": 15420,
+        "missing_rate": 0.012,
+        "duplicate_rate": 0.001,
+        "invalid_rate": 0.0,
+        "outlier_rate": 0.03,
+        "freshness_days": 1.0,
+        "quality_score": 94.5,
+        "quality_status": "HEALTHY",
+        "leakage_detected": false,
+        "leakage_count": 0,
+        "leakage_sources": []
+    },
+    "forecast_performance": [
+        {
+            "model_name": "Baseline: Naive (y_t=y_{t-1})",
+            "mae": 4.2,
+            "rmse": 5.8,
+            "mape": 18.5,
+            "directional_accuracy": 50.1,
+            "picp": null,
+            "mpiw": null
+        },
+        {
+            "model_name": "Baseline: 30D Moving Average",
+            "mae": 3.85,
+            "rmse": 4.9,
+            "mape": 15.2,
+            "directional_accuracy": 54.2,
+            "picp": null,
+            "mpiw": null
+        },
+        {
+            "model_name": "FreightQuant ML Prophet Engine",
+            "mae": 1.45,
+            "rmse": 1.92,
+            "mape": 5.4,
+            "directional_accuracy": 78.3,
+            "picp": 92.5,
+            "mpiw": 4.1
+        }
+    ],
+    "optimization_performance": {
+        "feasibility_rate": 100.0,
+        "constraint_violation_rate": 0.0,
+        "mean_regret": 2.1,
+        "max_regret": 8.4
+    },
+    "business_impact": {
+        "total_expected_cost": 41200000.0,
+        "total_baseline_cost": 45000000.0,
+        "cost_reduction_pct": 8.444444444444445,
+        "idle_reduction_pct": 45.2,
+        "delay_reduction_pct": 31.8
+    },
+    "robustness": {
+        "recommendation_stability_pct": 88.5,
+        "cost_variance": 4.2,
+        "deadline_compliance_pct": 96.1
+    },
+    "overall_status": "PASSED"
+}

@@ -88,11 +88,19 @@ export const VesselPortOptimizer: React.FC<VesselPortOptimizerProps> = ({
             <thead>
               <tr className="border-b border-[#1e3362] text-slate-400 font-mono text-[11px]">
                 <th className="py-2.5 px-3">Vessel Class</th>
-                <th className="py-2.5 px-3">Typical DWT</th>
-                <th className="py-2.5 px-3">Draft / LOA</th>
+                <th className="py-2.5 px-3">
+                  Typical Deadweight Tonnage
+                </th>
+                <th className="py-2.5 px-3">
+                  Draft / Length Overall
+                </th>
                 <th className="py-2.5 px-3">Port Clearance</th>
-                <th className="py-2.5 px-3 text-right">Est. Freight / MT</th>
-                <th className="py-2.5 px-3 text-right">Total Cost (₹ Cr)</th>
+                <th className="py-2.5 px-3 text-right">
+                  Est. Freight / Metric Ton
+                </th>
+                <th className="py-2.5 px-3 text-right">
+                  Total Cost (₹ Crores)
+                </th>
                 <th className="py-2.5 px-3 text-center">Turnaround</th>
                 <th className="py-2.5 px-3 text-center">Idle Risk</th>
                 <th className="py-2.5 px-3 text-right">Feasibility Score</th>
@@ -199,7 +207,9 @@ export const VesselPortOptimizer: React.FC<VesselPortOptimizerProps> = ({
             <div className="text-xl font-bold font-mono text-cyan-300 mt-1">
               {selectedPort.maxDraft} <span className="text-xs text-slate-400 font-normal">meters</span>
             </div>
-            <div className="text-[10px] text-slate-500 mt-1">Channel depth at CD</div>
+            <div className="text-[10px] text-slate-500 mt-1">
+              Channel depth at Chart Datum
+            </div>
           </div>
 
           <div className="bg-[#0c1630] border border-[#1e3362] p-3 rounded">
@@ -212,8 +222,11 @@ export const VesselPortOptimizer: React.FC<VesselPortOptimizerProps> = ({
 
           <div className="bg-[#0c1630] border border-[#1e3362] p-3 rounded">
             <div className="text-[11px] text-slate-400 font-medium">Avg Handling Discharge Rate</div>
-            <div className="text-xl font-bold font-mono text-emerald-400 mt-1">
-              {selectedPort.avgHandlingRateTPD.toLocaleString()} <span className="text-xs text-slate-400 font-normal">TPD</span>
+            <div className="text-xl font-bold font-mono text-emerald-400 mt-1 flex items-center gap-1">
+              {selectedPort.avgHandlingRateTPD.toLocaleString()} 
+              <span className="text-xs text-slate-400 font-normal">
+                Tons Per Day
+              </span>
             </div>
             <div className="text-[10px] text-slate-500 mt-1">Tons per calendar day</div>
           </div>

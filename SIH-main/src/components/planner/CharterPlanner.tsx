@@ -112,14 +112,14 @@ export const CharterPlanner: React.FC<CharterPlannerProps> = ({
 
         {/* Preset Buttons */}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400 font-medium">SIH 26006 Test Cases:</span>
+          <span className="text-xs text-slate-400 font-medium">Example Scenarios:</span>
           <button
             type="button"
             onClick={() => handleLoadPreset('coal-sih')}
             className="px-2.5 py-1 text-xs font-semibold rounded bg-cyan-950 text-cyan-300 border border-cyan-700/80 hover:bg-cyan-900 transition-colors flex items-center gap-1 cursor-pointer"
           >
             <Sparkles className="w-3 h-3 text-cyan-400" />
-            <span>SIH Benchmark: Coal 100k MT (Aus → Paradip)</span>
+            <span>Example: Coal 100k MT (Aus → Paradip)</span>
           </button>
           <button
             type="button"

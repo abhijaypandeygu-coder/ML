@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from app.schemas.shipment import ShipmentCreate
@@ -31,6 +31,7 @@ class Recommendation(BaseModel):
 
 class CharterAnalysisRequest(BaseModel):
     shipment: ShipmentCreate
+    sim_params: Optional[Dict[str, Any]] = None
 
 class CharterAnalysisResponse(BaseModel):
     analysis_id: str

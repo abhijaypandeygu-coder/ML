@@ -4,7 +4,7 @@ import {
   CharterRecommendationResult, 
   CharterPlannerInput 
 } from '../../types/freight';
-import { runOptimizationEngine } from '../../services/charterEngine';
+import { runOptimizationEngineAsync } from '../../services/charterEngine';
 import { 
   Sliders, 
   RotateCcw, 
@@ -39,8 +39,13 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({
 
   // Recalculate on any slider change
   useEffect(() => {
-    const updated = runOptimizationEngine(baseInput, params);
-    setSimResult(updated);
+    let isActive = true;
+    runOptimizationEngineAsync(baseInput, params).then(updated => {
+      if (isActive) {
+        setSimResult(updated);
+      }
+    });
+    return () => { isActive = false; };
   }, [params, baseInput]);
 
   const handleReset = () => {
@@ -303,7 +308,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({
                   <div>
                     <span className="text-slate-400">Expected Total Cost:</span>
                     <div className="font-bold font-mono text-slate-200 text-sm">
-                      ₹{baseTotalCr} Cr
+                      ₹{Number(baseTotalCr).toFixed(2)} Cr
                     </div>
                   </div>
 
@@ -348,7 +353,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({
                   <div>
                     <span className="text-slate-400">Expected Total Cost:</span>
                     <div className="font-bold font-mono text-white text-sm flex items-center gap-1.5">
-                      <span>₹{simTotalCr} Cr</span>
+                      <span>₹{Number(simTotalCr).toFixed(2)} Cr</span>
                       <span className={`text-[10px] font-bold ${isCostHigher ? 'text-rose-400' : 'text-emerald-400'}`}>
                         ({isCostHigher ? `+₹${costDiffCr}` : `₹${costDiffCr}`} Cr)
                       </span>

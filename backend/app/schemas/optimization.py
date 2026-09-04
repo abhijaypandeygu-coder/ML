@@ -20,6 +20,8 @@ class ContractOptimizationRequest(BaseModel):
     total_voyages: int
     contract_horizon_days: int
     risk_tolerance: str
+    freight_rate: float = 20.0
+    cargo_quantity_mt: float = 100000.0
 
 class ContractStrategy(BaseModel):
     strategy_type: str # SPOT, SHORT_TERM, MEDIUM_TERM

@@ -141,13 +141,25 @@ def optimize_full_strategy(req: VesselOptimizationRequest):
         # Simple orchestrator mock for full-strategy
         from ml.optimization.schemas.strategy import RecommendedStrategyResponse
         from ml.optimization.ranking.strategy_ranker import StrategyRanker
-        from ml.optimization.explainability.recommendation_explainer import RecommendationExplainer
         
-        # In a real scenario, we'd call all optimizers here.
-        # For now, just assemble a response with ranker and explainer
+        import os
+        import sys
+        # Need to ensure ml.llm is in path or we just import it
+        from ml.llm.inference import LocalFreightLLM
         
         ranker = StrategyRanker()
-        explainer = RecommendationExplainer()
+        
+        # Initialize our custom LLM
+        # We need absolute paths to the model files since the server runs from a different dir
+        llm_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../llm'))
+        model_path = os.path.join(llm_dir, 'custom_freight_llm.pth')
+        vocab_path = os.path.join(llm_dir, 'vocab_mapping.json')
+        
+        try:
+            llm = LocalFreightLLM(model_path=model_path, vocab_path=vocab_path)
+        except Exception as e:
+            llm = None
+            print(f"Failed to load Custom LLM: {e}")
         
         mock_combination = {
             "expected_total_cost": 1500000.0,
@@ -160,7 +172,11 @@ def optimize_full_strategy(req: VesselOptimizationRequest):
         }
         
         ranked = ranker.rank_alternatives([mock_combination])
-        explanation = explainer.generate_explanation(mock_combination)
+        
+        if llm:
+            explanation = llm.generate_explanation(mock_combination, max_new_tokens=100)
+        else:
+            explanation = "Explanation unavailable. Custom LLM not trained or missing."
         
         response = RecommendedStrategyResponse(
             recommended_vessel="Vessel X",

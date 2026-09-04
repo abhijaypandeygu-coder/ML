@@ -5,11 +5,15 @@ from ml.forecasting.evaluation import evaluate_forecast
 
 class XGBoostForecaster:
     def __init__(self, **kwargs):
+        n_est = kwargs.pop('n_estimators', 100)
+        lr = kwargs.pop('learning_rate', 0.1)
+        md = kwargs.pop('max_depth', 5)
+        
         self.model = xgb.XGBRegressor(
             objective='reg:squarederror',
-            n_estimators=100,
-            learning_rate=0.1,
-            max_depth=5,
+            n_estimators=n_est,
+            learning_rate=lr,
+            max_depth=md,
             **kwargs
         )
         self.features = None
